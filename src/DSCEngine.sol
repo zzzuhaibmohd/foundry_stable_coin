@@ -62,14 +62,15 @@ contract DSCEngine is ReentrancyGuard {
     // State Varaibles //
     ////////////////////
 
-    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10; //This is required to adjust precision for the chainlink latestRoundData -> It returns 1e8
     uint256 private constant PRECISION = 1e18;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
-    uint256 private constant LIQUIDATION_PRECISION = 100; 
-    uint256 private constant MIN_HEALTH_FACTOR = 1; 
+    uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant MIN_HEALTH_FACTOR = 1;
 
     mapping(address => address) private s_priceFeeds;
-    mapping(address => mapping(address => uint256)) private s_collateralDeposited;
+    mapping(address => mapping(address => uint256))
+        private s_collateralDeposited;
     mapping(address => uint256) private s_DSCMinted;
     address[] private s_collateralTokens;
 
@@ -78,11 +79,15 @@ contract DSCEngine is ReentrancyGuard {
     ////////////
     // Events //
     ////////////
-    event CollateralDeposited(address indexed user, address indexed token, uint256 indexed amount);
+    event CollateralDeposited(
+        address indexed user,
+        address indexed token,
+        uint256 indexed amount
+    );
 
-    //////////////
-    // Modifier //
-    //////////////
+    ///////////////
+    // Modifiers //
+    ///////////////
 
     modifier moreThanZero(uint256 amount) {
         if (amount == 0) revert DSCEngine__NeedsMoreThanZero();
@@ -96,7 +101,14 @@ contract DSCEngine is ReentrancyGuard {
         _;
     }
 
-    constructor(address[] memory tokenAddresses, address[] memory priceFeedAddress, address dscAddress) {
+    //////////
+    // Main //
+    //////////
+    constructor(
+        address[] memory tokenAddresses,
+        address[] memory priceFeedAddress,
+        address dscAddress
+    ) {
         if (tokenAddresses.length != priceFeedAddress.length) {
             revert DSCEngine__TokenAddressesAndPriceFeedAddressesAmountsDontMatch();
         }
@@ -109,23 +121,36 @@ contract DSCEngine is ReentrancyGuard {
         i_dsc = DecentralizedStableCoin(dscAddress);
     }
 
-    ///////////////
+    ////////////////////////
     // External Functions //
-    ///////////////
+    ////////////////////////
 
     function depositCollateralAndMintDsc() external {}
 
-    function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+    function depositCollateral(
+        address tokenCollateralAddress,
+        uint256 amountCollateral
+    )
         external
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
     {
-        s_collateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
+        s_collateralDeposited[msg.sender][
+            tokenCollateralAddress
+        ] += amountCollateral;
 
-        emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
+        emit CollateralDeposited(
+            msg.sender,
+            tokenCollateralAddress,
+            amountCollateral
+        );
 
-        bool success = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral);
+        bool success = IERC20(tokenCollateralAddress).transferFrom(
+            msg.sender,
+            address(this),
+            amountCollateral
+        );
         if (!success) revert DSCEngine__TransferFailed();
     }
 
@@ -134,7 +159,9 @@ contract DSCEngine is ReentrancyGuard {
     function redeemCollateral() external {}
 
     //@notice Check if the collateral amount value > DSC amount
-    function mintDsc(uint256 amountDscToMint) external moreThanZero(amountDscToMint) nonReentrant {
+    function mintDsc(
+        uint256 amountDscToMint
+    ) external moreThanZero(amountDscToMint) nonReentrant {
         s_DSCMinted[msg.sender] += amountDscToMint;
         _revertIfHealthFactorIsBroken(msg.sender);
     }
@@ -145,16 +172,13 @@ contract DSCEngine is ReentrancyGuard {
 
     function getHealthFactor() external view {}
 
-    ////////////////////////
-    // Private & Internal View Functions //
-    ////////////////////////
+    ////////////////////////////////////////
+    // Private & Internal View Functions  //
+    ////////////////////////////////////////
 
-    /*
-     * Returns how close to liquidation a user is
-     * If a user goes below 1 , then they get liquidated
-     */
-
-    function _getAccountInformation(address user)
+    function _getAccountInformation(
+        address user
+    )
         private
         view
         returns (uint256 totalDscMinted, uint256 collateralValueInUsd)
@@ -163,35 +187,66 @@ contract DSCEngine is ReentrancyGuard {
         collateralValueInUsd = getAccountCollateralValue(user);
     }
 
+    /*
+     * Returns how close to liquidation a user is
+     * If a user goes below 1 , then they get liquidated
+    */
     function _healthFactor(address user) private view returns (uint256) {
-        (uint256 totalDscMinted, uint256 collateralValueInUsd) = _getAccountInformation(user);
-        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-        return (collateralAdjustedForThreshold * PRECISION / totalDscMinted);
+        (
+            uint256 totalDscMinted,
+            uint256 collateralValueInUsd
+        ) = _getAccountInformation(user);
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd *
+            LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+
+        
+        return ((collateralAdjustedForThreshold * PRECISION) / totalDscMinted);
+
+        //Example 1
+        //totalDscMinted = 125$
+        //collateralValueInUsd = 550$
+        //collateralAdjustedForThreshold = (550 * 50) / 100 = 250$ -> if collateralValueInUsd < 250$ => bad healthFactor
+        //_healthFactor = 550 / 125 = 4.4
+
+        //Example 2
+        //totalDscMinted = 500$
+        //collateralValueInUsd = 800$
+        //collateralAdjustedForThreshold = (800 * 50) / 100 = 400$ -> if collateralValueInUsd < 400$ => bad healthFactor
+        //_healthFactor = 400 / 500 = 0.8
     }
 
     function _revertIfHealthFactorIsBroken(address user) internal view {
         //Check the health factor(enough collateral) or revert
         uint256 userHealthFactor = _healthFactor(user);
-        if(userHealthFactor < MIN_HEALTH_FACTOR) revert DSCEngine__BreaksHealthFactor(userHealthFactor);
+        if (userHealthFactor < MIN_HEALTH_FACTOR)
+            revert DSCEngine__BreaksHealthFactor(userHealthFactor);
     }
 
     ////////////////////////
-    // Public Functions //
+    //  Public Functions   //
     ////////////////////////
 
-    function getAccountCollateralValue(address user) public view returns (uint256 totalCollateralValueInUsd) {
+    function getAccountCollateralValue(
+        address user
+    ) public view returns (uint256 totalCollateralValueInUsd) {
         for (uint256 i = 0; i < s_collateralTokens.length; i++) {
             address token = s_collateralTokens[i];
             uint256 amount = s_collateralDeposited[token][user];
-            totalCollateralValueInUsd += getUsdValue(token, amount); 
+            totalCollateralValueInUsd += getUsdValue(token, amount);
         }
 
         return totalCollateralValueInUsd;
     }
 
-    function getUsdValue(address token, uint256 amount) public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
-        (,int256 price,,,) = priceFeed.latestRoundData();
-        return ((uint256(price) * ADDITIONAL_FEED_PRECISION) / PRECISION) * amount;
+    function getUsdValue(
+        address token,
+        uint256 amount
+    ) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            s_priceFeeds[token]
+        );
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        return
+            ((uint256(price) * ADDITIONAL_FEED_PRECISION) / PRECISION) * amount;
     }
 }
