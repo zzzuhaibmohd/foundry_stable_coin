@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.0;
 
 import {MockV3Aggregator} from "../test/mocks/MockV3Aggregator.sol";
 import {Script} from "forge-std/Script.sol";
@@ -59,13 +59,15 @@ contract HelperConfig is Script {
             DECIMALS,
             ETH_USD_PRICE
         );
-        ERC20Mock wethMock = new ERC20Mock("WETH", "WETH", msg.sender, 1000e8);
+        //ERC20Mock wethMock = new ERC20Mock("WETH", "WETH", msg.sender, 1000e8);
+        ERC20Mock wethMock = new ERC20Mock();
 
         MockV3Aggregator btcUsdPriceFeed = new MockV3Aggregator(
             DECIMALS,
             BTC_USD_PRICE
         );
-        ERC20Mock wbtcMock = new ERC20Mock("WBTC", "WBTC", msg.sender, 1000e8);
+        //ERC20Mock wbtcMock = new ERC20Mock("WBTC", "WBTC", msg.sender, 1000e8);
+        ERC20Mock wbtcMock = new ERC20Mock();
         vm.stopBroadcast();
 
         anvilNetworkConfig = NetworkConfig({
