@@ -126,13 +126,26 @@ contract DSCEngine is ReentrancyGuard {
     // External Functions //
     ////////////////////////
 
-    function depositCollateralAndMintDsc() external {}
+    /*
+     * @param tokenCollateralAddress: The ERC20 token address of the collateral you're depositing
+     * @param amountCollateral: The amount of collateral you're depositing
+     * @param amountDscToMint: The amount of DSC you want to mint
+     * @notice This function will deposit your collateral and mint DSC in one transaction
+     */
+    function depositCollateralAndMintDsc(
+        address tokenCollateralAddress,
+        uint256 amountCollateral,
+        uint256 amountDscToMint
+    ) external {
+        depositCollateral(tokenCollateralAddress, amountCollateral);
+        mintDsc(amountDscToMint);
+    }
 
     function depositCollateral(
         address tokenCollateralAddress,
         uint256 amountCollateral
     )
-        external
+        public
         moreThanZero(amountCollateral)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
@@ -162,12 +175,12 @@ contract DSCEngine is ReentrancyGuard {
     //@notice Check if the collateral amount value > DSC amount
     function mintDsc(
         uint256 amountDscToMint
-    ) external moreThanZero(amountDscToMint) nonReentrant {
+    ) public moreThanZero(amountDscToMint) nonReentrant {
         s_DSCMinted[msg.sender] += amountDscToMint;
-        //revert if the minting breaks the Health Factor 
+        //revert if the minting breaks the Health Factor
         _revertIfHealthFactorIsBroken(msg.sender);
         bool minted = i_dsc.mint(msg.sender, amountDscToMint);
-        if(!minted) revert DSCEngine__MintFailed();
+        if (!minted) revert DSCEngine__MintFailed();
     }
 
     function burnDsc() external {}
@@ -194,7 +207,7 @@ contract DSCEngine is ReentrancyGuard {
     /*
      * Returns how close to liquidation a user is
      * If a user goes below 1 , then they get liquidated
-    */
+     */
     function _healthFactor(address user) private view returns (uint256) {
         (
             uint256 totalDscMinted,
@@ -203,7 +216,6 @@ contract DSCEngine is ReentrancyGuard {
         uint256 collateralAdjustedForThreshold = (collateralValueInUsd *
             LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
 
-        
         return ((collateralAdjustedForThreshold * PRECISION) / totalDscMinted);
 
         //Example 1
