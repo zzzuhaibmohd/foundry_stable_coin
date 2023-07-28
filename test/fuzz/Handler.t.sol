@@ -10,6 +10,7 @@ import {DSCEngine} from "src/DSCEngine.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
+import {MockV3Aggregator} from "test/mocks/MockV3Aggregator.sol";
 
 contract Handler is Test {
 
@@ -23,6 +24,7 @@ contract Handler is Test {
 
     uint256 public timeMintsIsCalled;
     address[] public usersWithCollateralDeposited;
+    MockV3Aggregator ethUsdPriceFeed;
 
     constructor(DSCEngine _dscEngine, DecentralizedStableCoin _dsc){
         dsce = _dscEngine;
@@ -31,6 +33,8 @@ contract Handler is Test {
         address[] memory collateralTokens = dsce.getCollateralTokens();
         weth = collateralTokens[0];
         wbtc = collateralTokens[1];
+
+        ethUsdPriceFeed = MockV3Aggregator(dsce.getCollateralTokenPriceFeed(address(weth)));
     }
 
     function mintDsc(uint256 amount, uint256 addressSeed) public {
@@ -83,6 +87,11 @@ contract Handler is Test {
         dsce.redeemCollateral(collateral, amountCollateral);
     }
 
+    function updateCollateral(uint96 price) public {
+        int256 newPriceInt = int256(uint256(price));
+        ethUsdPriceFeed.updateAnswer(newPriceInt);
+    }
+    
     //Helper Functionsi
     function _getCollateralFromSeed(uint256 collateralSeed) private view returns(address) {
         if(collateralSeed % 2 == 0) return weth;
