@@ -53,4 +53,10 @@ contract InvariantsTest is StdInvariant, Test {
         assert(wethValue + btcValue >= totalSupply);
         
     }
+
+    function invariant_gettersShouldNotRevert() public view {
+        dsce.getLiquidationBonus();
+        dsce.getPrecision();
+        //forge inspect DSCEngine methods -> list out all the external functions
+    }
 }
